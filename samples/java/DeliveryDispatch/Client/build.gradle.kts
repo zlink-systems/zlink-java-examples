@@ -1,0 +1,30 @@
+plugins {
+    application
+}
+
+fun sampleProject(name: String) = project("${sampleRootPath()}:$name")
+
+fun sampleRootPath(): String {
+    val serverIndex = path.indexOf(":Server")
+    return if (serverIndex >= 0) {
+        path.substring(0, serverIndex)
+    } else {
+        path.substringBeforeLast(":", "")
+    }
+}
+
+dependencies {
+    implementation(sampleProject("Shared"))
+    implementation(sampleProject("Server:Configuration"))
+    implementation(zlinkLibs.zlink.framework.core)
+    implementation(zlinkLibs.zlink.http.client.java)
+    implementation(zlinkLibs.zlink.stream.connector)
+    implementation(zlinkLibs.zlink.bindings)
+    implementation("io.netty:netty-buffer:4.1.100.Final")
+}
+
+
+application {
+    mainClass.set("systems.zlink.samples.deliverydispatch.client.Program")
+    applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
+}

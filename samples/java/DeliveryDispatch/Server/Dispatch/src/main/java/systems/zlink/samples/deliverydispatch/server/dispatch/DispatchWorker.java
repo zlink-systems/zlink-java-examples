@@ -1,0 +1,143 @@
+package systems.zlink.samples.deliverydispatch.server.dispatch;
+
+import systems.zlink.framework.actors.ZLinkActorClient;
+import systems.zlink.framework.channels.ZLinkClient;
+import systems.zlink.samples.deliverydispatch.server.configuration.SampleNames;
+import systems.zlink.samples.deliverydispatch.server.configuration.SampleTimings;
+import systems.zlink.samples.deliverydispatch.server.dispatch.DeliveryOfferStore.DeliveryOffer;
+import systems.zlink.samples.deliverydispatch.shared.contracts.Messages;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.concurrent.CompletionStage;
+
+/**
+ * The dispatch flow. No step of it waits for a courier: the offer goes out one-way, the turn ends,
+ * and the offer row decides what happens next — either a decision arrives, or the deadline passes
+ * and the sweeper reassigns (common sample spec section 7.4).
+ */
+public final class DispatchWorker {
+    /** Who gets offered a delivery, and in what order. The worker's policy, not the node's. */
+    private static final List<String> Candidates = List.of("courier-a", "courier-b");
+
+    private final ZLinkClient channels;
+    private final ZLinkActorClient actors;
+    private final DeliveryOfferStore offers;
+
+    public DispatchWorker(
+            ZLinkClient channels, ZLinkActorClient actors, DeliveryOfferStore offers) {
+        this.channels = channels;
+        this.actors = actors;
+        this.offers = offers;
+    }
+
+    // --8<-- [start:doc-dd-offer-start]
+    /** The first offer. Records it, sends it, and returns — nobody is left waiting. */
+    public CompletionStage<Void> dispatch(Messages.AssignDeliveryMsg request) {
+        String courierId = Candidates.get(0);
+        return publishStatus(request, Messages.DeliveryStatus.Assigned, courierId)
+                .thenCompose(ignored -> startOffer(request, courierId, 0));
+    }
+
+    // --8<-- [end:doc-dd-offer-start]
+
+    /** A decision arrived. Accepted carries the delivery through; refused reassigns. */
+    public CompletionStage<Void> settle(DeliveryOffer offer, boolean accepted, String reason) {
+        String courierId = Candidates.get(offer.candidateIndex());
+        if (!accepted) {
+            System.out.println(
+                    "deliverydispatch dispatch: courier="
+                            + courierId
+                            + " did not take delivery="
+                            + offer.request().deliveryId()
+                            + " ("
+                            + (reason == null ? "refused" : reason)
+                            + ")");
+            return reassign(offer);
+        }
+
+        return publishStatus(offer.request(), Messages.DeliveryStatus.Accepted, courierId)
+                .thenCompose(
+                        ignored ->
+                                publishStatus(
+                                        offer.request(),
+                                        Messages.DeliveryStatus.PickedUp,
+                                        courierId))
+                .thenCompose(
+                        ignored ->
+                                publishStatus(
+                                        offer.request(),
+                                        Messages.DeliveryStatus.Delivered,
+                                        courierId))
+                .thenAccept(ignored -> offers.close(offer.request().deliveryId()));
+    }
+
+    /**
+     * The offer lapsed, or the courier refused. Either way the next candidate gets it. The deadline
+     * lives here rather than on the courier node: a node that timed the offer and manufactured a
+     * refusal would be hiding the dispatch policy (common sample spec section 7.4).
+     */
+    // --8<-- [start:doc-dd-reassign]
+    public CompletionStage<Void> reassign(DeliveryOffer offer) {
+        int nextIndex = offer.candidateIndex() + 1;
+        if (nextIndex >= Candidates.size()) {
+            return publishStatus(
+                            offer.request(),
+                            Messages.DeliveryStatus.Failed,
+                            Candidates.get(Candidates.size() - 1))
+                    .thenRun(
+                            () -> {
+                                offers.close(offer.request().deliveryId());
+                                System.out.println(
+                                        "deliverydispatch-dispatch failed delivery="
+                                                + offer.request().deliveryId()
+                                                + " reason=candidates-exhausted");
+                            });
+        }
+
+        String courierId = Candidates.get(nextIndex);
+        return publishStatus(offer.request(), Messages.DeliveryStatus.Reassigned, courierId)
+                .thenCompose(ignored -> startOffer(offer.request(), courierId, nextIndex));
+    }
+
+    // --8<-- [end:doc-dd-reassign]
+
+    public CompletionStage<Messages.ServerAssertionRes> assertServerEvidence(
+            Messages.ServerAssertionReq request) {
+        return channels.requestToChannel(SampleNames.TrackingChannel, request)
+                .submit(Messages.ServerAssertionRes.class);
+    }
+
+    private CompletionStage<Void> startOffer(
+            Messages.AssignDeliveryMsg request, String courierId, int candidateIndex) {
+        int attempt = offers.offer(request, candidateIndex, SampleTimings.CourierDecisionTimeout);
+        return offer(request, courierId, attempt);
+    }
+
+    // --8<-- [start:doc-dd-offer-send]
+    /** The offer is a one-way send: the turn that sends it ends right there. */
+    private CompletionStage<Void> offer(
+            Messages.AssignDeliveryMsg request, String courierId, int attempt) {
+        return actors.sendToActor(
+                        courierId,
+                        new Messages.OfferDeliveryMsg(
+                                courierId,
+                                request.deliveryId(),
+                                attempt,
+                                request.pickupAddress(),
+                                request.dropoffAddress()))
+                .submit();
+    }
+
+    // --8<-- [end:doc-dd-offer-send]
+
+    private CompletionStage<Void> publishStatus(
+            Messages.AssignDeliveryMsg request, Messages.DeliveryStatus status, String courierId) {
+        return channels.requestToChannel(
+                        SampleNames.TrackingChannel,
+                        new Messages.DeliveryStatusChangedReq(
+                                request.deliveryId(), status, courierId, Instant.now().toString()))
+                .submit(Messages.DeliveryStatusChangedRes.class)
+                .thenAccept(ignored -> {});
+    }
+}

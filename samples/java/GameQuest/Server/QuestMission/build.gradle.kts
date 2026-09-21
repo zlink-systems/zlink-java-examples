@@ -1,0 +1,26 @@
+plugins {
+    application
+}
+
+fun sampleProject(name: String) = project("${sampleRootPath()}:$name")
+
+fun sampleRootPath(): String {
+    val serverIndex = path.indexOf(":Server")
+    return if (serverIndex >= 0) path.substring(0, serverIndex) else path.substringBeforeLast(":", "")
+}
+
+dependencies {
+    implementation(sampleProject("Shared"))
+    implementation(sampleProject("Server:Configuration"))
+    implementation(zlinkLibs.zlink.framework.core)
+    implementation(zlinkLibs.zlink.framework.spring.boot.starter)
+    implementation(zlinkLibs.zlink.bindings)
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.17.2")
+    implementation("org.springframework.boot:spring-boot-starter:3.5.14")
+}
+
+
+application {
+    mainClass.set("systems.zlink.samples.gamequest.server.questmission.Program")
+    applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
+}

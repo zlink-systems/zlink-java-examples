@@ -1,0 +1,26 @@
+package systems.zlink.samples.bingo.server.play.infrastructure.zlink.spots.bingoroomspot.handlers;
+
+import systems.zlink.framework.ZLinkMessageContext;
+import systems.zlink.framework.spots.ZLinkSpotActorRequestHandler;
+import systems.zlink.samples.bingo.server.play.infrastructure.zlink.actors.PlayerActor;
+import systems.zlink.samples.bingo.server.play.infrastructure.zlink.spots.bingoroomspot.BingoRoomSpot;
+import systems.zlink.samples.bingo.shared.contracts.Messages;
+
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+
+public final class StopObservingBingoEventsHandler
+        implements ZLinkSpotActorRequestHandler<
+                BingoRoomSpot,
+                PlayerActor,
+                Messages.StopObservingBingoEventsReq,
+                Messages.StopObservingBingoEventsRes> {
+    @Override
+    public CompletionStage<Messages.StopObservingBingoEventsRes> handle(
+            BingoRoomSpot spot,
+            PlayerActor actor,
+            ZLinkMessageContext context,
+            Messages.StopObservingBingoEventsReq request) {
+        return CompletableFuture.completedFuture(spot.stopObserving(actor, request));
+    }
+}

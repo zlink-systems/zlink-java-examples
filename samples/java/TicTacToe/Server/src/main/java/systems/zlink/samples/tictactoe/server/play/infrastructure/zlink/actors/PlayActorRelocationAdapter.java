@@ -1,0 +1,65 @@
+package systems.zlink.samples.tictactoe.server.play.infrastructure.zlink.actors;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import systems.zlink.framework.actors.ZLinkActorRelocationAdapter;
+import systems.zlink.framework.actors.ZLinkRelocationCancellation;
+import systems.zlink.samples.tictactoe.shared.contracts.PlayerInfo;
+
+import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+
+// --8<-- [start:doc-relocation-adapter]
+public final class PlayActorRelocationAdapter implements ZLinkActorRelocationAdapter<PlayActor> {
+    private static final ObjectMapper JSON = new ObjectMapper();
+
+    // --8<-- [start:doc-ttt-actor-capture]
+    @Override
+    public CompletionStage<byte[]> capture(
+            PlayActor actor, ZLinkRelocationCancellation cancellation) {
+        try {
+            return CompletableFuture.completedFuture(
+                    JSON.writeValueAsBytes(
+                            new TransferState(
+                                    actor.joinedRoomId(),
+                                    actor.playerOrNull(),
+                                    actor.destroyAfterEntrySpotJoin(),
+                                    actor.disconnected())));
+        } catch (IOException error) {
+            return CompletableFuture.failedFuture(error);
+        }
+    }
+
+    // --8<-- [end:doc-ttt-actor-capture]
+
+    @Override
+    public CompletionStage<Void> restore(
+            PlayActor actor, byte[] state, ZLinkRelocationCancellation cancellation) {
+        try {
+            TransferState transferred = JSON.readValue(state, TransferState.class);
+            if (transferred.player() != null) {
+                actor.applyPlayer(transferred.player());
+            }
+            if (transferred.roomId() != null && !transferred.roomId().isBlank()) {
+                actor.joinGame(transferred.roomId());
+            }
+            if (transferred.destroyAfterEntrySpotJoin()) {
+                actor.markForDestroyAfterRoomLeave();
+            }
+            if (transferred.disconnected()) {
+                actor.markDisconnected();
+            }
+            return CompletableFuture.completedFuture(null);
+        } catch (IOException error) {
+            return CompletableFuture.failedFuture(error);
+        }
+    }
+
+    public record TransferState(
+            String roomId,
+            PlayerInfo player,
+            boolean destroyAfterEntrySpotJoin,
+            boolean disconnected) {}
+}
+// --8<-- [end:doc-relocation-adapter]

@@ -1,0 +1,203 @@
+package systems.zlink.samples.zoneworld.server.zone;
+
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+
+import systems.zlink.framework.actors.ZLinkActorClient;
+import systems.zlink.framework.actors.ZLinkActorCreateResult;
+import systems.zlink.framework.actors.ZLinkActorManager;
+import systems.zlink.framework.messaging.ZLinkMessage;
+import systems.zlink.framework.spots.ZLinkSpotCreateState;
+import systems.zlink.framework.spots.ZLinkSpotManager;
+import systems.zlink.samples.zoneworld.server.configuration.MaintenanceStore;
+import systems.zlink.samples.zoneworld.server.configuration.NodeCensus;
+import systems.zlink.samples.zoneworld.server.configuration.NodeMaintenanceState;
+import systems.zlink.samples.zoneworld.server.configuration.SampleTopology;
+import systems.zlink.samples.zoneworld.shared.Messages;
+import systems.zlink.samples.zoneworld.shared.ZoneWorldNames;
+import systems.zlink.samples.zoneworld.shared.ZoneWorldSpec;
+
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+
+public final class ZoneBootstrap implements ApplicationRunner {
+    private final SampleTopology topology;
+    private final ZLinkSpotManager spots;
+    private final ZLinkActorManager actors;
+    private final ZLinkActorClient actorClient;
+    private final NodeMaintenanceState maintenance;
+    private final MaintenanceStore store;
+    private final NodeCensus census;
+    private final ZoneStatusReporter reporter;
+
+    public ZoneBootstrap(
+            SampleTopology topology,
+            ZLinkSpotManager spots,
+            ZLinkActorManager actors,
+            ZLinkActorClient actorClient,
+            NodeMaintenanceState maintenance,
+            MaintenanceStore store,
+            NodeCensus census,
+            ZoneStatusReporter reporter) {
+        this.topology = topology;
+        this.spots = spots;
+        this.actors = actors;
+        this.actorClient = actorClient;
+        this.maintenance = maintenance;
+        this.store = store;
+        this.census = census;
+        this.reporter = reporter;
+    }
+
+    // Ops learns a node's zone set only from the node's own status report (README §2.2). The
+    // report is sent once the zone set is settled and before topology=ready is printed, so the
+    // report an observer gates on never carries the pre-claim census; the periodic report and
+    // the maintenance-change report are the only other senders.
+    private void ready() {
+        reporter.reportNow().exceptionally(error -> null).toCompletableFuture().join();
+        System.out.println(
+                "topology=ready node="
+                        + topology.nodeId()
+                        + " zones="
+                        + String.join(",", census.zoneIds()));
+    }
+
+    @Override
+    public void run(ApplicationArguments args) {
+        if (topology.isSubscriberOnly()) {
+            System.out.println("topology=ready node=" + topology.nodeId() + " zones=");
+            return;
+        }
+        // Maintenance is desired state, not a message: a node that starts reads it back from
+        // the store, so a restart cannot quietly reopen a node the operator closed.
+        boolean restored = store.get(topology.nodeId());
+        maintenance.apply(topology.nodeId(), restored);
+        System.out.println(
+                "maintenance restored node=" + topology.nodeId() + " enabled=" + restored);
+        for (String nodeId : java.util.List.of("zone-node-1", "zone-node-2")) {
+            maintenance.apply(nodeId, store.get(nodeId));
+        }
+        // A replacement keeps the NodeId and claims nothing. A stopped owner's zone objects stay
+        // with the incarnation that owned them, so claiming here could settle on one zone — which
+        // is neither the two a cold start needs nor the none a replacement announces, and a state
+        // the loop below could never leave. Only a cold start claims.
+        if (topology.allowsEmptyZoneSet()) {
+            ready();
+            return;
+        }
+        for (int attempt = 0; census.zoneIds().size() != 2; attempt++) {
+            java.util.List<String> claimed = census.zoneIds();
+            java.util.List<String> adjacentOrder = new java.util.ArrayList<>();
+            for (String zone : claimed) {
+                for (String adjacent : ZoneWorldSpec.adjacentZones(zone)) {
+                    if (!claimed.contains(adjacent) && !adjacentOrder.contains(adjacent)) {
+                        adjacentOrder.add(adjacent);
+                    }
+                }
+            }
+            java.util.List<String> fallbackOrder =
+                    ZoneWorldSpec.zones().stream()
+                            .filter(
+                                    zone ->
+                                            !claimed.contains(zone)
+                                                    && !adjacentOrder.contains(zone))
+                            .toList();
+            boolean claimedChanged = false;
+            boolean adjacentSettling = false;
+            for (String zone : adjacentOrder) {
+                if (!census.zoneIds().equals(claimed)) {
+                    claimedChanged = true;
+                    break;
+                }
+                try {
+                    var result =
+                            spots.getOrCreate(zone, ZoneWorldNames.ZONE_SPOT_TYPE)
+                                    .inMesh(ZoneWorldNames.MESH)
+                                    .submit()
+                                    .toCompletableFuture()
+                                    .join();
+                    if (census.zoneIds().equals(claimed)
+                            && result.state() == ZLinkSpotCreateState.CREATED) {
+                        adjacentSettling = true;
+                    }
+                } catch (RuntimeException ignored) {
+                    // The other eligible process may still be entering the mesh.
+                    adjacentSettling = true;
+                }
+                if (!census.zoneIds().equals(claimed)) {
+                    claimedChanged = true;
+                    break;
+                }
+            }
+            if (!claimedChanged && !adjacentSettling) {
+                for (String zone : fallbackOrder) {
+                    if (!census.zoneIds().equals(claimed)) break;
+                    try {
+                        spots.getOrCreate(zone, ZoneWorldNames.ZONE_SPOT_TYPE)
+                                .inMesh(ZoneWorldNames.MESH)
+                                .submit()
+                                .toCompletableFuture()
+                                .join();
+                    } catch (RuntimeException ignored) {
+                        // The other eligible process may still be entering the mesh.
+                    }
+                    if (!census.zoneIds().equals(claimed)) break;
+                }
+            }
+            if (attempt >= 119)
+                throw new IllegalStateException(
+                        "Zone Spot capacity did not settle. node="
+                                + topology.nodeId()
+                                + " zones="
+                                + census.zoneIds());
+            CompletableFuture.runAsync(
+                            () -> {}, CompletableFuture.delayedExecutor(250, TimeUnit.MILLISECONDS))
+                    .join();
+        }
+        if (!topology.botsDisabled()) {
+            for (ZoneWorldSpec.BotFixture bot :
+                    ZoneWorldSpec.bots().stream()
+                            .filter(
+                                    value ->
+                                            census.zoneIds()
+                                                    .contains(
+                                                            ZoneWorldSpec.zoneOf(
+                                                                    value.x(), value.y())))
+                            .toList()) {
+                ZLinkActorCreateResult result =
+                        actors.getOrCreate(bot.id(), ZoneWorldNames.PLAYER_ACTOR_TYPE)
+                                .inMesh(ZoneWorldNames.MESH)
+                                .request(ZLinkMessage.empty())
+                                .submit()
+                                .toCompletableFuture()
+                                .join();
+                if (result instanceof ZLinkActorCreateResult.Created created) {
+                    actorClient
+                            .requestToActor(
+                                    created.actor().actorId(),
+                                    new Messages.EnterWorldReq(
+                                            bot.x(), bot.y(), true, bot.dirX(), bot.dirY()))
+                            .submit(Messages.EnterWorldRes.class)
+                            .toCompletableFuture()
+                            .join();
+                }
+                System.out.println(
+                        "bot spawned. bot="
+                                + bot.id()
+                                + ", zone="
+                                + ZoneWorldSpec.zoneOf(bot.x(), bot.y())
+                                + ", start=("
+                                + bot.x()
+                                + ","
+                                + bot.y()
+                                + ")"
+                                + ", dir=("
+                                + bot.dirX()
+                                + ","
+                                + bot.dirY()
+                                + ")");
+            }
+        }
+        ready();
+    }
+}
