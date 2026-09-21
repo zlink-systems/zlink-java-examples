@@ -1,5 +1,3 @@
-**English** | [한국어](./README.ko.md)
-
 # ZLink Java · Kotlin examples
 
 A read-only mirror of `framework/languages/java/` in
@@ -16,3 +14,4 @@ issues and pull requests to the source repository — this one accepts no PRs.
 Each directory's README carries the prerequisites, build, run and verify steps. The documentation
 lives at [zlink.systems](https://zlink.systems).
 
+The Korean counterpart is [README.ko.md](README.ko.md).

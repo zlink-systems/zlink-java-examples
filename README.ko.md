@@ -1,5 +1,3 @@
-[English](./README.md) | **한국어**
-
 # ZLink Java · Kotlin examples
 
 [zlink-systems/zlink](https://github.com/zlink-systems/zlink)의
@@ -16,3 +14,4 @@
 각 디렉터리의 README가 전제 조건·빌드·실행·검증 절차를 적는다. 문서는
 [zlink.systems](https://zlink.systems)에 있다.
 
+영어 대응 문서는 [README.md](README.md)다.
