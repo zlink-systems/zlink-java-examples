@@ -4,8 +4,7 @@
 Java로 옮긴 것이다. Actor·STREAM은 담지 않았다. 문서가 읽는 `--8<--` 마커 이름은 .NET
 쪽과 같게 두었다.
 
-Kotlin tutorial이 같은 Gradle build 안 `../kotlin/`에 있다. 두 언어는 subproject만
-나누어 쓰고 `settings.gradle.kts`·`gradle/libs.versions.toml`·wrapper는 함께 쓴다.
+이 tutorial은 Gradle root의 `settings.gradle.kts`·`gradle/libs.versions.toml`·wrapper를 함께 쓴다.
 
 ## 전제 조건
 
@@ -102,7 +101,7 @@ HTTP client 단계는 mesh 밖의 HTTP client가 Client와 Server의 HTTP 표면
 first request: p1 rookie
 request shaping: status 200 weight 2
 json body: player 200 room 8ed46dd8-e11d-40fd-8e95-c7be5eda90bc chat 202
-response kinds: typed 200 raw application/json fetch anonymous
+response kinds: typed 200 raw application/json fetch speedy-p2
 compressed response: 200 encoding-removed true
 redirect: 200 p1
 basic auth: without 401 with 200
@@ -511,12 +510,23 @@ HTTP/1.1 404
 $ ./java/StreamClient/build/install/StreamClient/bin/StreamClient
 connected: true
 round trip: 178ms        # STREAM request/reply
-bound player: p1         # 연결을 player에 묶는다
-pushed: speedy           # player가 그 연결로 밀어 준다
+actor bound: p1
+bound player: p1          # 연결에 Actor가 하나인 상태
+pushed: speedy, actor: p1 # connector에서 handle 없이 전송·수신
+actor bound: p2
+bound player: p2
+actor handle: p1
+actor handle: p2
+received actor id: p1
+pushed: speedy-p1, actor: p1
+received actor id: p2
+pushed: speedy-p2, actor: p2
 ```
 
-`pushed`가 핵심이다. client는 nickname 변경만 보냈고, 응답이 아니라 **player가 스스로 민
-알림**을 받았다.
+`pushed`는 nickname 변경 요청의 응답이 아닌 **각 player가 같은 연결로 보낸 알림**이다.
+첫 요청은 Actor가 하나라 connector에서 handle 없이 보낸다. 둘을 묶은 뒤에는 Actor handle로
+각 player를 지정한다. handle 없이 connector에서 알림을 받는 callback도 메시지의 `ActorId`로
+발신 Actor를 구분할 수 있다.
 
 Java 쪽에서 알아 둘 것은 다음과 같다.
 
@@ -659,7 +669,7 @@ curl -i -X POST http://127.0.0.1:5280/rooms/<roomId>/import \
 | `session-handler` | `Server/.../sessions/PingHandler.java` |
 | `session-actor-bind` | `Server/.../sessions/AuthenticateHandler.java` |
 | `stream-register` | `Server/.../ServerApplication.java` |
-| `stream-client` · `session-actor-client` | `StreamClient/.../StreamClientProgram.java` |
+| `stream-client` · `session-actor-client` · `single-actor-send` · `actor-id-receive` · `actor-handle-events` · `actor-handle-send` · `actor-handle-per-handle-receive` · `actor-handle-send-call` · `actor-handle-receive` | `StreamClient/.../StreamClientProgram.java` |
 | `http-client-create` | `HttpClient/.../HttpClientProgram.java` |
 | `http-first-request` | `HttpClient/.../HttpClientProgram.java` |
 | `http-request-shaping` | `HttpClient/.../HttpClientProgram.java` |

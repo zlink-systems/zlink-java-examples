@@ -1,9 +1,9 @@
 [English](./README.md) | **한국어**
 
-# ZLink Java · Kotlin examples
+# ZLink Java examples
 
 이 저장소는 [zlink-systems/zlink](https://github.com/zlink-systems/zlink)의
-`framework/languages/java/` 아래 예제 코드를 그대로 내보낸 읽기 전용 저장소다. 코드는
+framework 예제 코드를 그대로 내보낸 읽기 전용 저장소다. 코드는
 원본 저장소에서만 고치고, 그 결과가 이곳에 자동으로 실린다. `main`에는 가장 최근 릴리스와
 그 뒤 원본에 합쳐진 수정이 들어 있고, 릴리스마다 framework 버전과 같은 이름의 태그
 `vA.B.C`가 붙는다. 이슈와 pull request는 원본 저장소에 낸다. 이 저장소는 pull request를

@@ -1,9 +1,9 @@
 **English** | [한국어](./README.ko.md)
 
-# ZLink Java · Kotlin examples
+# ZLink Java examples
 
-A read-only mirror of `framework/languages/java/` in
-[zlink-systems/zlink](https://github.com/zlink-systems/zlink). `main` is the latest release
+A read-only mirror of framework examples in [zlink-systems/zlink](https://github.com/zlink-systems/zlink).
+`main` is the latest release
 plus the fixes merged since; each release is the tag `vA.B.C` (the framework version). Send
 issues and pull requests to the source repository — this one accepts no PRs.
 

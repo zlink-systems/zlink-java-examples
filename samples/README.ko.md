@@ -1,7 +1,9 @@
-# ZLink Java/Kotlin Samples
+Java·Kotlin 공통 sample 시나리오를 담은 디렉터리다([공통 sample 문서](https://github.com/zlink-systems/zlink/blob/main/framework/doc/framework/common/sample/README.ko.md)가
+정의한다).
 
-Java·Kotlin 공통 sample 시나리오를 담은 디렉터리다([공통 sample 문서](../../../doc/framework/common/sample/README.ko.md)가
-정의한다). Java sample은 `java/`, Kotlin sample은 `kotlin/` 아래에 있다.
+# ZLink Java Samples
+
+Java sample은 `java/` 아래에 있다.
 
 English: [`README.md`](./README.md)
 
@@ -21,12 +23,13 @@ bash 블록은 Linux·macOS·WSL에서, PowerShell 블록은 Windows PowerShell 
 
 Python은 필요 없다. Linux 포트 예약 도우미(`runner-common.sh`의
 `zlink_sample_reserve_ports_in_range`)와 Windows ZoneWorld ZW-B8 fault proxy
-(`ZoneWorld/Support/SessionRouteBlockProxy.java`) 모두 JDK single-file source
+(`Support/SessionRouteBlockProxy.java`) 모두 JDK single-file source
 program(`java <file>.java ...`)으로 돌아 위 JDK 25만 있으면 된다.
 
 ## 내려받기와 설치
 
-`zlink-java-examples` 저장소를 clone하고 `samples/`에서 실행한다. 배포된
+`zlink-java-examples` 저장소를 clone하고 `samples/`에서 실행한다.
+배포된
 `zlink-framework-*` 패키지를 Maven Central에서 받아 빌드한다(버전은
 `gradle/zlink-sample-dependencies.settings.gradle.kts`의 `zlink.frameworkVersion` 기본값
 참고). 별도로 내려받거나 설치할 항목은 없다 — Gradle wrapper가 Gradle을, Gradle이 위 package를
@@ -71,13 +74,6 @@ Linux·WSL:
 ./java/SupportChat/run_sample.sh
 ./java/TicTacToe/run_sample.sh
 ./java/ZoneWorld/run_sample.sh
-./kotlin/Bingo/run_sample.sh
-./kotlin/DeliveryDispatch/run_sample.sh
-./kotlin/GameQuest/run_sample.sh
-./kotlin/ShoppingMall/run_sample.sh
-./kotlin/SupportChat/run_sample.sh
-./kotlin/TicTacToe/run_sample.sh
-./kotlin/ZoneWorld/run_sample.sh
 ```
 
 Windows:
@@ -92,13 +88,6 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\java\ShoppingMall\run_sample.ps1
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\java\SupportChat\run_sample.ps1
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\java\TicTacToe\run_sample.ps1
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\java\ZoneWorld\run_sample.ps1
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\kotlin\Bingo\run_sample.ps1
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\kotlin\DeliveryDispatch\run_sample.ps1
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\kotlin\GameQuest\run_sample.ps1
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\kotlin\ShoppingMall\run_sample.ps1
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\kotlin\SupportChat\run_sample.ps1
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\kotlin\TicTacToe\run_sample.ps1
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\kotlin\ZoneWorld\run_sample.ps1
 ```
 
 ## 검증
@@ -140,27 +129,17 @@ sample은 실패다. 종료 코드 `0`과 "Redis 컨테이너/역할 process 정
 | `ShoppingMall` | Channel service selection, order workflow, event streams, projections, and fanout events | Redis location store |
 | `ZoneWorld` | Gateway, two ZoneNodes, and Ops roles: Actor transfer across zones, zone Logical Multicast, Node direct operations, and runtime events | Redis location store |
 
-두 언어 디렉터리 모두 같은 sample root를 담는다. 내부 파일 배치는 언어마다 다를 수
-있다.
+각 language directory는 같은 sample root를 담는다. 내부 파일 배치는 달라질 수 있다.
 
 ```text
-samples/
-|-- java/
-|   |-- Bingo/
-|   |-- DeliveryDispatch/
-|   |-- GameQuest/
-|   |-- ShoppingMall/
-|   |-- SupportChat/
-|   |-- TicTacToe/
-|   `-- ZoneWorld/
-`-- kotlin/
-    |-- Bingo/
-    |-- DeliveryDispatch/
-    |-- GameQuest/
-    |-- ShoppingMall/
-    |-- SupportChat/
-    |-- TicTacToe/
-    `-- ZoneWorld/
+samples/java/
+|-- Bingo/
+|-- DeliveryDispatch/
+|-- GameQuest/
+|-- ShoppingMall/
+|-- SupportChat/
+|-- TicTacToe/
+`-- ZoneWorld/
 ```
 
 공통 sample 문서가 업무 흐름과 message 계약을 소유한다. 개별 sample README는 그 언어에

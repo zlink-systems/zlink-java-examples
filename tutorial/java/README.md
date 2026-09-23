@@ -6,9 +6,8 @@ Full walkthrough (all 12 stages, Java ↔ .NET surface differences, and the
 release CI job runs verbatim: prerequisites, download and install, build,
 run, verify, and troubleshooting.
 
-The Kotlin tutorial lives next to this one, in the same Gradle build
-(`../kotlin/`). Both share `settings.gradle.kts`, `gradle/libs.versions.toml`,
-and the wrapper.
+This tutorial shares `settings.gradle.kts`, `gradle/libs.versions.toml`, and the wrapper with
+the Gradle root.
 
 ## Prerequisites
 
@@ -110,7 +109,7 @@ the authenticated Server admin surface.
 first request: p1 rookie
 request shaping: status 200 weight 2
 json body: player 200 room 8ed46dd8-e11d-40fd-8e95-c7be5eda90bc chat 202
-response kinds: typed 200 raw application/json fetch anonymous
+response kinds: typed 200 raw application/json fetch speedy-p2
 compressed response: 200 encoding-removed true
 redirect: 200 p1
 basic auth: without 401 with 200

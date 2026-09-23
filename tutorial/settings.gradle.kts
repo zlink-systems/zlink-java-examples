@@ -66,8 +66,3 @@ include("java:HttpClient")
 // Kotlin has no directory of its own in this repository -- it lives under
 // framework/languages/java, next to the Java sources. The same layout the
 // quickstart uses.
-include("kotlin:Shared")
-include("kotlin:Server")
-include("kotlin:Client")
-include("kotlin:StreamClient")
-include("kotlin:HttpClient")
