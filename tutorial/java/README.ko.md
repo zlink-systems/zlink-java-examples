@@ -155,18 +155,31 @@ Invoke-RestMethod -Uri 'http://127.0.0.1:5280/players/p1/profile'
   기동 중이다. `docker run --rm -p 6379:6379 redis`를 다른 터미널에 띄워 두고, 로그에
   `Ready to accept connections`가 뜬 뒤 tutorial을 실행한다.
 
+- **Redis용 6379 포트가 이미 사용 중이다.** `redis-cli -h 127.0.0.1 -p 6379 ping`의
+  응답이 `PONG`이면 기존 Redis를 사용한다. `docker run`을 생략하고 이전 tutorial
+  process를 종료한 뒤 아래 `zlink-tutorial-java:*` 키 정리 명령을 실행한다. 그런 다음
+  Server와 Client를 다시 실행한다. 기존 Redis는 tutorial 종료 시에도 중지하지 않는다.
+
 - **`Address already in use` (5280/5281/7501/7502/7511/7512/7521).** 이전 실행이 아직
   떠 있다. 두 process를 모두 종료한 뒤 다시 실행한다.
 
 - **`ZLinkConfigurationException: MeshNode descriptor publication failed [mesh=game,
   status=REJECTED_CONFLICT]`, 또는 프로필 호출이 계속 `503 one-way route is not
-  connected`를 낸다.** 같은 Redis를 다른 실행(다른 tutorial 시도, 이전에 비정상 종료한
-  Server)이 먼저 써서 `zlink-tutorial-java:` 키 아래 mesh descriptor가 남아 있을 때 나온다.
-  그 키만 지우고 Server부터 다시 실행한다 — 다른 언어의 tutorial(`zlink-tutorial-dotnet:`
-  등)은 건드리지 않는다.
+  connected`를 낸다.** 강제 종료 후 이전 owner lease는 최대 15초 동안 유효할 수 있다
+  ([owner lease TTL 기본값](https://github.com/zlink-systems/zlink/blob/main/framework/doc/framework/common/spec/server/05-location-relocation/01-location-runtime.ko.md#L670-L674)).
+  만료될 때까지 기다린 뒤 Server를 다시 실행한다. 시작에 실패한 process는 자동으로
+  재시도하지 않는다. 즉시 다시 시작하려면 이전 tutorial process를 종료하고 아래 명령으로
+  `zlink-tutorial-java:` 키만 삭제한다. 다른 언어의 tutorial(`zlink-tutorial-dotnet:` 등)에
+  속한 키는 지우지 않는다.
 
   ```bash
   redis-cli --scan --pattern 'zlink-tutorial-java:*' | xargs -r redis-cli del
+  ```
+
+  Windows에서는 같은 Redis에 연결된 `redis-cli`로 다음 명령을 실행한다.
+
+  ```powershell
+  redis-cli --scan --pattern 'zlink-tutorial-java:*' | ForEach-Object { redis-cli DEL $_ | Out-Null }
   ```
 
 ## 구성
@@ -192,11 +205,11 @@ runtime weight endpoint 하나를 연다. Server도 HTTP를 여는 덕분에 emb
 |---|---|
 | Client HTTP | 5280 |
 | Server HTTP (weight endpoint) | 5281 |
-| mesh listen (Server) | `tcp://0.0.0.0:7501` |
-| mesh listen (Client) | `tcp://0.0.0.0:7502` |
+| mesh listen (Server) | `tcp://127.0.0.1:7501` |
+| mesh listen (Client) | `tcp://127.0.0.1:7502` |
 | ClientServer | 7511 |
 | fanout publisher | `tcp://127.0.0.1:7512` |
-| stream node (Server) | `tcp://0.0.0.0:7521` |
+| stream node (Server) | `tcp://127.0.0.1:7521` |
 
 ## 단계
 
@@ -244,9 +257,8 @@ channel 호출과 달리 후보를 고르지 않으므로 그대로 실패한다
 
 1. 받는 node가 `setRoutingId`로 id를 고정해야 한다. 고정하지 않으면 생성된 id라 부르는
    쪽이 URL에 적을 수 없다.
-2. 받는 node가 `setAdvertiseHost`로 **부르는 쪽이 실제로 접속한 주소**를 알려야 한다.
-   bind 주소 `0.0.0.0`을 그대로 광고하면 아래 3의 대조에서 어긋나 admission이 거부된다.
-   거부는 조용하다. 로그에 남지 않고 `PEER_READY`만 영영 나오지 않는다.
+2. 받는 node가 광고하는 endpoint는 **부르는 쪽이 실제로 접속한 주소**와 일치해야 한다.
+   이 예제의 listen 주소와 `setAdvertiseHost`는 모두 `127.0.0.1`이다.
 3. 부르는 쪽이 `peerConnections().connect(RoutingId, endpoint)`로 어느 id가 그 endpoint에
    있는지 알려야 한다.
 
