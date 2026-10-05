@@ -48,7 +48,10 @@ function Wait-Http([string]$Endpoint) {
 }
 
 function Get-LogCount([string[]]$Paths, [string]$Evidence) {
-    return @(Select-String -Path $Paths -Pattern $Evidence -SimpleMatch -ErrorAction SilentlyContinue).Count
+    # On Windows cmd.exe creates the redirected log after Start-Role returns.
+    $existingPaths = @($Paths | Where-Object { Test-Path -LiteralPath $_ })
+    if ($existingPaths.Count -eq 0) { return 0 }
+    return @(Select-String -LiteralPath $existingPaths -Pattern $Evidence -SimpleMatch).Count
 }
 
 function Wait-LogCount([string[]]$Paths, [string]$Evidence, [int]$Expected) {
@@ -180,8 +183,8 @@ try {
     $missionBConfig = Write-RoleConfig "mission-b" "mission-b" "channelEndpoint" $missionBChannel $missionBHttp $missionBRouter
     $apiAConfig = Write-RoleConfig "api-a" "api-a" "streamEndpoint" $apiAStream $apiAHttp $missionAChannel
     $apiBConfig = Write-RoleConfig "api-b" "api-b" "streamEndpoint" $apiBStream $apiBHttp $missionBChannel
-    $clientConfig = Write-ClientConfig "client" "full"
-    $rehydrateConfig = Write-ClientConfig "rehydrate-client" "rehydrate"
+    $closeReplayReleaseFile = Join-Path $RunDir "close-replay.release"
+    $clientConfig = Write-ClientConfig "client" "full" $closeReplayReleaseFile
     $releaseFile = Join-Path $RunDir "owner-unavailable.release"
     $ownerUnavailableConfig = Write-ClientConfig "owner-unavailable-client" "owner-unavailable" $releaseFile
 
@@ -205,8 +208,15 @@ try {
     Wait-LogCount @((Join-Path $LogDir "api-b.log")) "gamequest-ready kind=spot-route node=api-b mesh=gamequest.player-quests" 1
 
     $clientLog = Join-Path $LogDir "client.log"
-    Invoke-ZlinkSampleExecutable -Executable (Get-AppBin "Client" "Client") `
-        -Arguments @("--config", $clientConfig) -OutputPath $clientLog
+    $client = Start-Role "client" "Client" "Client" $clientConfig
+    Wait-LogCount @($clientLog) "gamequest-close-requested player=player-alice" 1
+    $close = Invoke-RestMethod -Method Post "$missionAHttp/self-check/owner/player-alice/close"
+    if (-not $close.closed) { throw "Close message was not accepted." }
+    $missionLogs = @((Join-Path $LogDir "mission-a.log"), (Join-Path $LogDir "mission-b.log"))
+    Wait-LogCount $missionLogs "gamequest-mission closing player=player-alice generation=" 1
+    New-Item -ItemType File -Path $closeReplayReleaseFile | Out-Null
+    $client.WaitForExit()
+    if ($client.ExitCode -ne 0) { throw "Client scenario failed." }
     Assert-ClientMarker $clientLog "gamequest=completed"
     Assert-ClientMarker $clientLog "gamequest-server-evidence=completed"
     $apiLogs = @((Join-Path $LogDir "api-a.log"), (Join-Path $LogDir "api-b.log"))
@@ -215,16 +225,18 @@ try {
     Wait-LogAtLeast $missionLogs "gamequest-mission processed player=" 4
     Wait-LogCount $missionLogs "gamequest-mission reconciled player=player-alice quest=first-hunt" 1
 
-    $close = Invoke-RestMethod -Method Post "$missionAHttp/self-check/owner/player-alice/close"
-    if (-not $close.closed) { throw "Owner close did not complete." }
-    $rehydrateLog = Join-Path $LogDir "rehydrate-client.log"
-    Invoke-ZlinkSampleExecutable -Executable (Get-AppBin "Client" "Client") `
-        -Arguments @("--config", $rehydrateConfig) -OutputPath $rehydrateLog
+    Assert-ClientMarker $clientLog "gamequest-close-replay=completed"
     Wait-LogCount $missionLogs "gamequest-mission replayed player=player-alice generation=" 1
+    $closingLine = Select-String -Path $missionLogs -Pattern "gamequest-mission closing player=player-alice generation=([0-9]+)"
+    $replayLine = Select-String -Path $missionLogs -Pattern "gamequest-mission replayed player=player-alice generation=([0-9]+)"
+    $closingGeneration = $closingLine.Matches[0].Groups[1].Value
+    $replayGeneration = $replayLine.Matches[0].Groups[1].Value
+    if ($closingGeneration -eq $replayGeneration) { throw "Close replay must execute in a new runtime ObjectGeneration." }
 
     $ownerClient = Start-Role "owner-unavailable-client" "Client" "Client" $ownerUnavailableConfig
-    Wait-LogCount @((Join-Path $LogDir "mission-a.log"), (Join-Path $LogDir "mission-b.log")) "gamequest-owner-ready player=player-owner-unavailable" 1
-    $ownerNode = if ((Get-LogCount @((Join-Path $LogDir "mission-a.log")) "gamequest-owner-ready player=player-owner-unavailable node=mission-a") -eq 1) { "mission-a" } else { "mission-b" }
+    Wait-LogCount @((Join-Path $LogDir "owner-unavailable-client.log")) "gamequest-owner-join-completed" 1
+    Wait-LogCount @((Join-Path $LogDir "mission-a.log"), (Join-Path $LogDir "mission-b.log")) "gamequest-owner-initialized player=player-owner-unavailable" 1
+    $ownerNode = if ((Get-LogCount @((Join-Path $LogDir "mission-a.log")) "gamequest-owner-initialized player=player-owner-unavailable node=mission-a") -eq 1) { "mission-a" } else { "mission-b" }
     Stop-ZlinkSampleProcessTree -Process $RoleProcesses[$ownerNode]
     $ownerClientRelease = New-Item -ItemType File -Path $releaseFile -Force
     $ownerClient.WaitForExit()
